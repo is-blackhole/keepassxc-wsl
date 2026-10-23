@@ -1,14 +1,38 @@
 import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parseEnv } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { formatVariables, escapeEnvValue, escapeShellValue, writeFileAtomic } from "../src/output.js";
+import { formatVariables, escapeShellValue, writeFileAtomic } from "../src/output.js";
 
 describe("env format", () => {
-  it("escapes quotes, backslash, dollar and newlines", () => {
-    const value = 'a"b\\c$HOME\nline2\r';
-    expect(formatVariables([["KEY", value]], "env")).toBe('KEY="a\\"b\\\\c\\$HOME\\nline2\\r"\n');
-    expect(escapeEnvValue(value)).toBe('a\\"b\\\\c\\$HOME\\nline2\\r');
+  it.each([
+    "",
+    'a"b',
+    "it's",
+    "a\\b",
+    "$HOME ${SECRET}",
+    "line1\nline2",
+    "literal\\n and \\r",
+    "'\"both quotes\nNEXT=not-an-assignment",
+    "all '\"` quotes",
+    "  # comment-like value  ",
+    "`printf injected`",
+    "pässwörd 🔑",
+  ])("round-trips %j through the Node.js dotenv parser", (value) => {
+    const text = formatVariables([["KEY", value], ["NEXT", "unchanged"]], "env");
+    expect(parseEnv(text)).toEqual({ KEY: value, NEXT: "unchanged" });
+  });
+
+  it.each(["a\rb", "all '\"` quotes\nand a newline"])('rejects unrepresentable values without leaking them', (value) => {
+    const format = (): string => formatVariables([["FIRST", "secret"], ["KEY", value]], "env");
+    expect(format).toThrow("cannot be represented losslessly");
+    try {
+      format();
+    } catch (error) {
+      expect((error as Error).message).not.toContain(value);
+      expect((error as Error).message).not.toContain("secret");
+    }
   });
 
   it("keeps unicode as is", () => {

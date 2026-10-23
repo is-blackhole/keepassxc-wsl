@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { chmod, rename, rm, writeFile } from "node:fs/promises";
+import { parseEnv } from "node:util";
 import { KpxError } from "./errors.js";
 
 export type Format = "env" | "shell" | "json";
@@ -34,11 +35,18 @@ export function createLogger(quiet: boolean, write: (text: string) => void = (te
   };
 }
 
-export function escapeEnvValue(value: string): string {
-  return value
-    .replace(/[\\"$]/g, (char) => `\\${char}`)
-    .replace(/\r/g, "\\r")
-    .replace(/\n/g, "\\n");
+/** Serialize for Node.js dotenv syntax, rejecting values that cannot round-trip. */
+export function quoteEnvValue(value: string): string {
+  const candidates = ['"', "'", "`"]
+    .filter((quote) => !value.includes(quote))
+    .map((quote) => `${quote}${value}${quote}`);
+  candidates.push(value);
+
+  for (const candidate of candidates) {
+    const parsed = parseEnv(`KEY=${candidate}\n`);
+    if (Object.keys(parsed).length === 1 && parsed.KEY === value) return candidate;
+  }
+  throw new KpxError("value cannot be represented losslessly in dotenv format; use --format json or --format shell");
 }
 
 export function escapeShellValue(value: string): string {
@@ -48,7 +56,7 @@ export function escapeShellValue(value: string): string {
 export function formatVariables(variables: Variables, format: Format): string {
   switch (format) {
     case "env":
-      return variables.map(([key, value]) => `${key}="${escapeEnvValue(value)}"\n`).join("");
+      return variables.map(([key, value]) => `${key}=${quoteEnvValue(value)}\n`).join("");
     case "shell":
       return variables.map(([key, value]) => `export ${key}=${escapeShellValue(value)}\n`).join("");
     case "json":

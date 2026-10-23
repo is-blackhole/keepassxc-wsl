@@ -67,7 +67,7 @@ const USAGE = `Usage:
   kpx env <url> [filters] [--format env|shell|json] [--prefix P] [--only A,B]
                 [--with-login VAR] [--with-password VAR]
   kpx render <template> [-o out] [--mode 600]
-  kpx run <url> [filters] -- <command> [args…]
+  kpx run <url> [filters] [--only A,B] -- <command> [args…]
   kpx associate
   kpx status
 
@@ -236,7 +236,7 @@ async function cmdRun(context: Context): Promise<number> {
 
   const variables = await withSession(context, {}, async (session) => {
     const entry = await selectFor(session, url, filterFrom(context.options), logger);
-    return collectVariables(entry, { prefix: "" }, logger);
+    return collectVariables(entry, { prefix: "", only: parseOnly(context.options.only) }, logger);
   });
 
   return runChild(file, argv, Object.fromEntries(variables), context.env, logger);
