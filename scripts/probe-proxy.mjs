@@ -1,5 +1,5 @@
-// Прототип: один change-public-keys через keepassxc-proxy.exe.
-// Запуск: pnpm build && node scripts/probe-proxy.mjs
+// Prototype: a single change-public-keys request via keepassxc-proxy.exe.
+// Run: pnpm build && node scripts/probe-proxy.mjs
 import { randomBytes } from "node:crypto";
 import nacl from "tweetnacl";
 import { Transport, waitForMessage, resolveProxyPath } from "../dist/transport.js";

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.34.0",
-  "description": "CLI для KeePassXC через browser integration (WSL → Windows)",
+  "description": "CLI for KeePassXC via browser integration (WSL → Windows)",
   "bin": {
     "kpx": "dist/cli.js"
   },
@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "kpx": "node dist/cli.js",
     "dev": "tsc -p tsconfig.json --watch",
     "lint": "eslint .",
     "test": "vitest run"

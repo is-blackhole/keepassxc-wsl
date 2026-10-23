@@ -5,6 +5,12 @@ export const DEFAULT_PROXY_PATH = "/mnt/c/Program Files/KeePassXC/keepassxc-prox
 
 export type Message = Record<string, unknown>;
 
+/** Message channel to KeePassXC: the real proxy or a test fake. */
+export interface Channel extends EventEmitter {
+  send(message: object): void;
+  close(): void;
+}
+
 export function resolveProxyPath(env: NodeJS.ProcessEnv = process.env): string {
   return env.KPX_PROXY || DEFAULT_PROXY_PATH;
 }
@@ -37,7 +43,7 @@ export class FrameParser {
  * Events: "message" (Message), "error" (Error), "close" (code, signal).
  * "error" must have a listener, otherwise EventEmitter throws.
  */
-export class Transport extends EventEmitter {
+export class Transport extends EventEmitter implements Channel {
   private readonly child: ChildProcessWithoutNullStreams;
   private readonly parser = new FrameParser();
   private closed = false;
@@ -60,7 +66,7 @@ export class Transport extends EventEmitter {
 
     this.child.on("error", (error) => {
       this.closed = true;
-      this.emit("error", error);
+      this.emit("error", new Error(`failed to start keepassxc-proxy (${proxyPath}): ${error.message}`));
     });
 
     this.child.on("close", (code, signal) => {
@@ -85,7 +91,7 @@ export class Transport extends EventEmitter {
 }
 
 export function waitForMessage(
-  transport: Transport,
+  transport: Channel,
   timeoutMs: number,
   match: (message: Message) => boolean = () => true,
 ): Promise<Message> {
