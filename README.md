@@ -1,8 +1,8 @@
 # kpx
 
-CLI для KeePassXC, запущенного на Windows, из WSL. Получает пароли, логины и атрибуты записей через browser integration (`keepassxc-proxy.exe`). В WSL ничего вводить не нужно.
+CLI for KeePassXC running on Windows, used from WSL. It fetches entry passwords, logins and attributes through browser integration (`keepassxc-proxy.exe`). Nothing needs to be typed on the WSL side beyond confirming access in KeePassXC.
 
-## Установка
+## Installation
 
 ```sh
 source ~/.nvm/nvm.sh
@@ -11,99 +11,144 @@ pnpm build
 pnpm link --global
 ```
 
-Путь к proxy по умолчанию: `/mnt/c/Program Files/KeePassXC/keepassxc-proxy.exe`. Переопределяется переменной `KPX_PROXY`.
+The default proxy path is `/mnt/c/Program Files/KeePassXC/keepassxc-proxy.exe`. Override it with the `KPX_PROXY` variable.
 
-## Настройка KeePassXC
+## KeePassXC setup
 
-1. Включить Browser Integration: «Инструменты → Настройки → Browser Integration».
-2. В разделе «Дополнительно» включить «Возвращать дополнительные строковые поля "KPH: "».
-3. Включить «Возвращать только наиболее подходящие».
-4. По желанию отключить подтверждение доступа или выбрать «Запомнить».
+1. Enable Browser Integration: "Tools → Settings → Browser Integration".
+2. Under "Advanced", enable "Return additional string fields with the 'KPH: ' prefix".
+3. Enable "Return only best-matching credentials".
+4. Optionally turn off the access prompt or select "Remember".
 
-## Соглашение для записей
+## Entry convention
 
-- Поле URL указывает на ресурс, например `http://loto.dev/players`.
-- Переменные хранятся в строковых атрибутах с именем `KPH: NAME`. Например, `KPH: API_KEY`.
+- The URL field points to the resource, for example `wsl.dev/service`.
+- Variables are stored in string attributes named `KPH: NAME`, for example `KPH: API_KEY`.
 
-## Команды
+## Commands
 
 ```sh
-kpx status                                   # proxy, версия KeePassXC, база, ассоциация
-kpx associate                                # связать kpx с базой заново (подтвердите в KeePassXC)
-kpx get http://loto.dev/players              # пароль записи
-kpx get http://loto.dev/players -f API_KEY   # атрибут KPH: API_KEY
-kpx get http://loto.dev/players --name "Players *" --login admin
-(umask 077; kpx env http://loto.dev/players > .env)
-eval "$(kpx env http://loto.dev/players --format shell)"
-kpx render .env.tpl -o .env                  # подстановка {{kp:…}} в шаблон
-kpx run http://loto.dev/players --only API_KEY,DB_URL -- pnpm dev
+kpx status                                   # proxy, KeePassXC version, database, association
+kpx associate                                # re-associate kpx with the database (confirm in KeePassXC)
+kpx get wsl.dev/service                      # entry password
+kpx get wsl.dev/service -f API_KEY           # the KPH: API_KEY attribute
+kpx get wsl.dev/service --name "Service *" --login admin
+(umask 077; kpx env wsl.dev/service > .env)
+eval "$(kpx env wsl.dev/service --format shell)"
+kpx list wsl.dev                             # URL + title + uuid of entries matching the fragment
+kpx render .env.tpl -o .env                  # substitute {{kp:…}} placeholders in a template
+kpx run wsl.dev/service --only API_KEY,DB_URL -- pnpm dev
 ```
 
-### Фильтры
+### Filters
 
-`--name` (поддерживает `*`), `--login`, `--group`, `--uuid`. Без фильтров, если подходит больше одной записи, команда завершится с кодом 3 и покажет список.
+`--name` (supports `*`), `--login`, `--group`, `--uuid`. Without filters, if more than one entry matches, the command exits with code 3 and prints the list.
 
-Поля для `get -f`: `password` (по умолчанию), `login`, `name`, `uuid`, `totp` и любой атрибут `KPH: <ИМЯ>` по имени `<ИМЯ>`.
+Fields for `get -f`: `password` (default), `login`, `name`, `uuid`, `totp`, and any `KPH: <NAME>` attribute by its `<NAME>`.
 
 ### env
 
-- `--format env|shell|json`, по умолчанию `env` (dotenv, совместимый с `node --env-file` и `node:util.parseEnv`). Кавычки подбираются для точного восстановления значения; если значение нельзя представить без потерь, команда завершается с ошибкой до вывода данных. Для таких значений используйте `json` или `shell`.
-- `--prefix P` добавляет префикс к именам переменных.
-- `--only A,B` выводит только перечисленные атрибуты.
-- `--with-login VAR` и `--with-password VAR` добавляют логин и пароль записи.
-- Атрибуты с именами, которые не подходят для переменной окружения, пропускаются с предупреждением.
+- `--format env|shell|json`, default `env` (dotenv, compatible with `node --env-file` and `node:util.parseEnv`). Quoting is chosen so the value round-trips exactly; if a value cannot be represented losslessly, the command fails before printing any data. Use `json` or `shell` for such values.
+- `--prefix P` adds a prefix to variable names.
+- `--only A,B` prints only the listed attributes.
+- `--with-login VAR` and `--with-password VAR` add the entry login and password.
+- Attributes whose names are not valid environment variable names are skipped with a warning.
 
-Формат `env` предназначен для dotenv-парсера. Для `eval` или `source` используйте только `--format shell`: dotenv-значения могут содержать синтаксис, исполняемый оболочкой.
+The `env` format is meant for a dotenv parser. For `eval` or `source`, use only `--format shell`: dotenv values may contain syntax that the shell would execute.
 
-При перенаправлении `> .env` файл создаёт оболочка. `umask 077` в примере защищает новый файл; для существующего файла проверьте права и при необходимости выполните `chmod 600 .env`.
+With `> .env`, the file is created by the shell. `umask 077` in the example protects the new file; for an existing file, check its permissions and run `chmod 600 .env` if needed.
 
 ### render
 
-Синтаксис ссылки: `{{kp:<url>#<field>}}` или с фильтрами `{{kp:<url>#<field>?name=X&login=Y}}`. Текст вне ссылок копируется без изменений. `\{{` выводит `{{` буквально.
+Placeholder syntax: `{{kp:<url>#<field>}}` or with filters `{{kp:<url>#<field>?name=X&login=Y}}`. Text outside placeholders is copied as is. `\{{` emits a literal `{{`.
 
-Записи кешируются по паре URL и фильтров, поэтому для одного URL достаточно одного запроса и одного окна подтверждения. Если хотя бы одна подстановка не удалась, файл не записывается, а все ошибки выводятся в stderr. Файл пишется атомарно, с правами 600 по умолчанию (`--mode`).
+Entries are cached per URL and filter pair, so one URL needs only a single request and a single confirmation window. If any substitution fails, the file is not written and all errors go to stderr. The file is written atomically, with mode 600 by default (`--mode`).
 
-Подстановка буквальная: значения не экранируются под dotenv, JSON или shell. Используйте доверенные шаблоны и учитывайте синтаксис целевого файла; для экспорта переменных в dotenv используйте `env`.
+Substitution is literal: values are not escaped for dotenv, JSON or shell. Use trusted templates and mind the target file syntax; to export variables in dotenv format use `env`.
 
 ### run
 
-Атрибуты записи передаются в окружение команды. Код выхода команды возвращается как код `kpx`.
+Entry attributes are passed into the command environment. The command exit code is returned as the `kpx` exit code.
 
-`--only A,B` ограничивает передаваемые атрибуты. Без него передаются все атрибуты с допустимыми именами. Атрибуты переопределяют одноимённые переменные текущего окружения, включая `PATH`, `NODE_OPTIONS`, `LD_PRELOAD` и `BASH_ENV`, и могут влиять на исполняемый код. Для совместно редактируемых записей задавайте явный список доверенных переменных.
+`--only A,B` limits which attributes are passed. Without it, all attributes with valid names are passed. Attributes override same-named variables from the current environment, including `PATH`, `NODE_OPTIONS`, `LD_PRELOAD` and `BASH_ENV`, and can affect the executed code. For shared entry editing, set an explicit list of trusted variables.
 
-## Коды выхода
+### list
 
-| Код | Значение |
-|-----|----------|
-| 0 | успех |
-| 1 | общая ошибка |
-| 2 | запись не найдена |
-| 3 | неоднозначный выбор |
-| 4 | база заблокирована (таймаут разблокировки) |
-| 5 | ассоциация отклонена |
+`kpx list [fragment]` prints metadata for all entries in the connected database — URL, title and UUID, one entry per line, fields separated by tabs. The fragment filters entries by a case-insensitive substring of the URL or title:
 
-Секреты выводятся только в stdout. Диагностика идёт в stderr, её можно отключить флагом `--quiet` (`-q`). Ошибки выводятся всегда.
+```sh
+kpx list                # all entries
+kpx list wsl.dev        # entries whose URL or title contains wsl.dev
+```
 
-## Переменные окружения
+KeePassXC returns the entry list through the `get-database-entries` request, so enable **Browser Integration → Advanced → "Allow limited access to all entries in connected databases (ignores site access restrictions)"**, otherwise the request is denied. Available since KeePassXC 2.8.
 
-| Переменная | По умолчанию | Назначение |
-|------------|--------------|------------|
-| `KPX_PROXY` | `/mnt/c/Program Files/KeePassXC/keepassxc-proxy.exe` | путь к proxy |
-| `KPX_CONFIG` | `~/.config/kpx/assoc.json` | файл ассоциаций |
-| `KPX_TIMEOUT` | `30` | таймаут обычного запроса, с |
-| `KPX_UNLOCK_TIMEOUT` | `120` | ожидание разблокировки и подтверждения, с |
+### Entry completion
 
-## Ассоциации
+`kpx completion` prints a Bash completion function that uses `fzf` to pick an entry and inserts it as the unambiguous `keepassxc://by-uuid/<uuid>` reference. It works for any command whose first argument is an entry.
 
-Ассоциации хранятся в `~/.config/kpx/assoc.json` с правами 600; папка создаётся с правами 700. Для каждой базы хранится пара `id` и `idKey`. Хотя `idKey` получен как публичный ключ, протокол принимает эту пару как токен доступа без доказательства владения соответствующим приватным ключом. Поэтому `assoc.json` — секрет: его копия позволяет воспроизвести ассоциацию при доступе к browser integration. Выдача записей по-прежнему зависит от настроек и подтверждений KeePassXC.
+`fzf` must be installed. Enable it with:
 
-Не публикуйте этот файл и не включайте его в диагностические вложения или незащищённые резервные копии. Сессионные приватные ключи генерируются при запуске и на диск не сохраняются. CLI рассчитан на доверенную локальную WSL-среду: права файла не изолируют его от других процессов того же пользователя.
+```sh
+source <(kpx completion)    # add to ~/.bashrc
+kpx_complete_link_for doit  # attach to your command
+```
 
-## Как отозвать доступ
+After that, `doit wsl.dev` + <kbd>Tab</kbd> opens the list of entries matching the fragment; the chosen one is inserted as `keepassxc://by-uuid/…`.
 
-В KeePassXC: настройки базы → Browser Integration → удалить ключ «wsl». Локальный файл ассоциаций можно удалить вручную: `rm ~/.config/kpx/assoc.json`.
+The completion calls the CLI as `kpx`; if it is not on `PATH`, set `KPX_CMD`. When running through `pnpm`, add `--silent`, otherwise the pnpm banner ends up in the list:
 
-## Разработка
+```sh
+export KPX_CMD="pnpm --silent kpx"                          # only from the project directory
+export KPX_CMD="node /path/to/keepassxc-wsl/dist/cli.js"    # from anywhere
+```
+
+Example wrapper that connects to a database with `psql`:
+
+```sh
+doit() {
+  local dsn
+  dsn=$(kpx get "$1" -f DB_URL) || return
+  psql "$dsn"
+}
+```
+
+With `doit wsl.dev` + <kbd>Tab</kbd>, an entry is selected and resolved via `keepassxc://by-uuid/…`, and `psql` connects using the `KPH: DB_URL` attribute of exactly that entry.
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | success |
+| 1 | general error |
+| 2 | entry not found |
+| 3 | ambiguous selection |
+| 4 | database locked (unlock timeout) |
+| 5 | association rejected |
+
+Secrets are written only to stdout. Diagnostics go to stderr and can be silenced with `--quiet` (`-q`). Errors are always printed.
+
+## Environment variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `KPX_PROXY` | `/mnt/c/Program Files/KeePassXC/keepassxc-proxy.exe` | path to the proxy |
+| `KPX_CONFIG` | `~/.config/kpx/assoc.json` | association file |
+| `KPX_TIMEOUT` | `30` | regular request timeout, seconds |
+| `KPX_UNLOCK_TIMEOUT` | `120` | wait for unlock and confirmation, seconds |
+| `KPX_CMD` | `kpx` | CLI command used by the completion script |
+
+## Associations
+
+Associations are stored in `~/.config/kpx/assoc.json` with mode 600; the directory is created with mode 700. For each database an `id` and `idKey` pair is stored. Although `idKey` was obtained as a public key, the protocol accepts the pair as an access token without proof of possession of the corresponding private key. Therefore `assoc.json` is a secret: a copy of it can reproduce the association whenever browser integration is reachable. Entry access still depends on KeePassXC settings and confirmations.
+
+Do not publish this file and do not include it in diagnostic attachments or unencrypted backups. Session private keys are generated at startup and never written to disk. The CLI targets a trusted local WSL environment: file permissions do not isolate it from other processes running as the same user.
+
+## Revoking access
+
+In KeePassXC: database settings → Browser Integration → remove the "wsl" key. The local association file can be removed manually: `rm ~/.config/kpx/assoc.json`.
+
+## Development
 
 ```sh
 pnpm dev     # tsc --watch
@@ -112,4 +157,4 @@ pnpm test
 pnpm build
 ```
 
-Интеграционный тест против реального KeePassXC запускается вручную: `KPX_E2E=1 pnpm test`.
+The integration test against real KeePassXC is run manually: `KPX_E2E=1 pnpm test`.

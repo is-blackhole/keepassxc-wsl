@@ -127,6 +127,9 @@ export class FakeKeePass extends EventEmitter implements Channel {
       case "get-logins":
         return this.getLogins(inner);
 
+      case "get-database-entries":
+        return this.getDatabaseEntries(inner);
+
       case "get-totp": {
         const entry = this.entries().find((candidate) => candidate.uuid === inner.uuid);
         if (!entry?.totp) return { action, error: "No TOTP", errorCode: 15 };
@@ -162,6 +165,23 @@ export class FakeKeePass extends EventEmitter implements Channel {
           [`KPH: ${key}`]: value,
         })),
         ...(entry.totp ? { totp: entry.totp } : {}),
+      })),
+    };
+  }
+
+  private getDatabaseEntries(inner: Message): Message {
+    const action = "get-database-entries";
+    const keys = (inner.keys as Array<{ id: string; key: string }>) ?? [];
+    const authorized = keys.some((key) => this.associations.get(key.id) === key.key);
+    if (!authorized) return { action, error: "Association failed", errorCode: 8 };
+
+    return {
+      action,
+      success: "true",
+      entries: this.entries().map((entry) => ({
+        title: entry.name,
+        uuid: entry.uuid,
+        url: entry.url,
       })),
     };
   }

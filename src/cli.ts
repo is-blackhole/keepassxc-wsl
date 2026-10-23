@@ -16,7 +16,7 @@ import {
   writeFileAtomic,
 } from "./output.js";
 import { isAssociationRejected, isKeePassError, KEEPASS_ERROR } from "./protocol.js";
-import { DEFAULT_FIELD, type Entry, type EntryFilter, readField, selectEntry } from "./select.js";
+import { DEFAULT_FIELD, type Entry, type EntryFilter, matchFragment, readField, selectEntry } from "./select.js";
 import { parseTemplate, renderTemplate } from "./template.js";
 import { resolveProxyPath } from "./transport.js";
 
@@ -66,6 +66,8 @@ const USAGE = `Usage:
   kpx get <url> [-f FIELD] [--name N] [--login L] [--group G] [--uuid U]
   kpx env <url> [filters] [--format env|shell|json] [--prefix P] [--only A,B]
                 [--with-login VAR] [--with-password VAR]
+  kpx list [fragment]
+  kpx completion [command]
   kpx render <template> [-o out] [--mode 600]
   kpx run <url> [filters] [--only A,B] -- <command> [args…]
   kpx associate
@@ -228,6 +230,72 @@ async function cmdRender(context: Context): Promise<number> {
   return EXIT.OK;
 }
 
+async function cmdList(context: Context): Promise<number> {
+  const fragment = context.args[0] ?? "";
+  const metas = await withSession(context, {}, async (session) => session.listEntries());
+  const lines = metas
+    .filter((meta) => matchFragment(fragment, meta))
+    .map((meta) => `${meta.url}\t${meta.name}\t${meta.uuid}`);
+  process.stdout.write(`${lines.join("\n")}${lines.length > 0 ? "\n" : ""}`);
+  return EXIT.OK;
+}
+
+const COMPLETION_SCRIPT = `# KeePassXC entry completion for kpx. Requires fzf: https://github.com/junegunn/fzf
+
+# Ask readline to redraw the prompt after fzf closes (see the trailing
+# printf '\\e[5n' below). Same trick the stock fzf completion uses.
+bind '"\\e[0n": redraw-current-line' 2>/dev/null
+
+# Completes the URL argument of a wrapper command whose first positional
+# argument is the entry. The chosen entry is inserted as
+# keepassxc://by-uuid/<uuid>, which kpx resolves unambiguously regardless of
+# the entry URL or the "best-matching-only" setting.
+# The kpx CLI is located via $KPX_CMD (default: "kpx"). Point it at your build
+# if "kpx" is not on PATH, e.g. KPX_CMD="pnpm kpx" or
+# KPX_CMD="node /path/to/keepassxc-wsl/dist/cli.js".
+_kpx_complete_link() {
+  if [ "$COMP_CWORD" -gt 1 ]; then
+    return 0
+  fi
+
+  local cur=""
+  [ -n "\${COMP_WORDS[COMP_CWORD]}" ] && cur="\${COMP_WORDS[COMP_CWORD]}"
+
+  # fzf draws its UI on the terminal and prints the chosen line to stdout.
+  # --with-nth=1,2 shows URL and title while the original line (with the UUID in
+  # field 3) is what fzf returns; we strip it back out in the shell.
+  # kpx list already filters by "$cur", so fzf gets the matching subset directly.
+  local select uuid kpx_cmd="\${KPX_CMD:-kpx}"
+  select="$($kpx_cmd --quiet list "$cur" | fzf \
+--no-sort \
+--delimiter=$'\\t' --nth=1,2 --with-nth=1,2 \
+--prompt='entry > ' --height=40%)"
+  printf '\\e[5n'
+
+  [ -z "$select" ] && return 0
+
+  uuid="\${select##*$'\\t'}"
+  [ -z "$uuid" ] && return 0
+
+  COMPREPLY=("keepassxc://by-uuid/$uuid")
+  return 0
+}
+
+# Register completion for your own wrapper:
+#   source <(kpx completion)
+#   kpx_complete_link_for doit
+kpx_complete_link_for() {
+  local name="$1"
+  eval "_kpx_complete_\${name}() { _kpx_complete_link \${name}; }"
+  complete -o nospace -F "_kpx_complete_\${name}" "$name"
+}`;
+
+async function cmdCompletion(_context: Context): Promise<number> {
+  void _context;
+  process.stdout.write(COMPLETION_SCRIPT);
+  return EXIT.OK;
+}
+
 async function cmdRun(context: Context): Promise<number> {
   const url = requireArg(context.args, 0, "url");
   const [file, ...argv] = context.tail;
@@ -301,6 +369,8 @@ const COMMANDS: Record<string, (context: Context) => Promise<number>> = {
   render: cmdRender,
   run: cmdRun,
   associate: cmdAssociate,
+  list: cmdList,
+  completion: cmdCompletion,
   status: cmdStatus,
 };
 

@@ -8,7 +8,7 @@ import {
   isAssociationRejected,
   isKeePassError,
 } from "./protocol.js";
-import { normalizeEntry, type Entry } from "./select.js";
+import { normalizeEntry, normalizeEntryMeta, type Entry, type EntryMeta } from "./select.js";
 import { loadAssociation, resolveConfigPath, saveAssociation } from "./store.js";
 import { type Channel, Transport, resolveProxyPath } from "./transport.js";
 
@@ -56,12 +56,23 @@ export class KeePassSession {
   }
 
   async getLogins(url: string): Promise<Entry[]> {
+    const association = this.requireAssociation();
+    const raw = await this.protocol.getLogins(url, association, this.allowUnlock);
+    return raw.map(normalizeEntry);
+  }
+
+  async listEntries(): Promise<EntryMeta[]> {
+    const association = this.requireAssociation();
+    const raw = await this.protocol.getDatabaseEntries(association, this.allowUnlock);
+    return raw.map(normalizeEntryMeta);
+  }
+
+  private requireAssociation(): Association {
     if (this.databaseHash === undefined) throw new KpxError("KeePassXC database is locked", EXIT.LOCKED);
     if (!this.association) {
       throw new KpxError("no association with the database, run `kpx associate`", EXIT.ASSOC_REJECTED);
     }
-    const raw = await this.protocol.getLogins(url, this.association, this.allowUnlock);
-    return raw.map(normalizeEntry);
+    return this.association;
   }
 
   getTotp(uuid: string): Promise<string> {

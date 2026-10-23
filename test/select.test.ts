@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { KpxError } from "../src/errors.js";
-import { matchGlob, normalizeEntry, readField, selectEntry, type Entry } from "../src/select.js";
+import { matchGlob, matchFragment, normalizeEntry, normalizeEntryMeta, readField, selectEntry, type Entry } from "../src/select.js";
 
 const raw = [
   {
@@ -76,6 +76,40 @@ describe("matchGlob", () => {
     expect(matchGlob("a.b*", "a.bXYZ")).toBe(true);
     expect(matchGlob("a.b*", "aXbXYZ")).toBe(false);
     expect(matchGlob("(x)*", "(x)and more")).toBe(true);
+  });
+});
+
+describe("normalizeEntryMeta", () => {
+  it("maps title/url fields to the EntryMeta shape", () => {
+    expect(normalizeEntryMeta({ title: "Players", uuid: "u1", url: "http://loto.dev" })).toEqual({
+      name: "Players",
+      uuid: "u1",
+      url: "http://loto.dev",
+    });
+  });
+});
+
+describe("matchFragment", () => {
+  const meta = { url: "http://loto.dev/players", name: "Players prod" };
+
+  it("matches an empty fragment", () => {
+    expect(matchFragment("", meta)).toBe(true);
+  });
+
+  it("matches a case-insensitive substring of the URL", () => {
+    expect(matchFragment("loto.dev", meta)).toBe(true);
+    expect(matchFragment("LOTO.DEV", meta)).toBe(true);
+    expect(matchFragment("players", meta)).toBe(true);
+  });
+
+  it("matches a case-insensitive substring of the name", () => {
+    expect(matchFragment("players prod", meta)).toBe(true);
+    expect(matchFragment("PROD", meta)).toBe(true);
+  });
+
+  it("does not match unrelated fragments", () => {
+    expect(matchFragment("github.com", meta)).toBe(false);
+    expect(matchFragment("admin", meta)).toBe(false);
   });
 });
 

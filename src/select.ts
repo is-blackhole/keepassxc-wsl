@@ -1,5 +1,5 @@
 import { EXIT, KpxError } from "./errors.js";
-import type { RawEntry } from "./protocol.js";
+import type { RawEntry, RawEntryMeta } from "./protocol.js";
 
 export interface Entry {
   name: string;
@@ -22,6 +22,28 @@ export interface EntryFilter {
 
 const KPH_PREFIX = "KPH: ";
 export const DEFAULT_FIELD = "password";
+
+/** Entry metadata returned by `get-database-entries`: URL, title and UUID only. */
+export interface EntryMeta {
+  name: string;
+  uuid: string;
+  url: string;
+}
+
+export function normalizeEntryMeta(raw: RawEntryMeta): EntryMeta {
+  return {
+    name: raw.title ?? "",
+    uuid: raw.uuid ?? "",
+    url: raw.url ?? "",
+  };
+}
+
+/** Case-insensitive substring match against the entry URL or title. */
+export function matchFragment(fragment: string, meta: Pick<EntryMeta, "url" | "name">): boolean {
+  if (fragment === "") return true;
+  const needle = fragment.toLowerCase();
+  return meta.url.toLowerCase().includes(needle) || meta.name.toLowerCase().includes(needle);
+}
 
 export function normalizeEntry(raw: RawEntry): Entry {
   const stringFields = new Map<string, string>();

@@ -37,6 +37,12 @@ export interface RawEntry {
   totp?: string;
 }
 
+export interface RawEntryMeta {
+  title?: string;
+  uuid?: string;
+  url?: string;
+}
+
 export interface Timeouts {
   requestMs: number;
   unlockMs: number;
@@ -155,6 +161,15 @@ export class KeePassProtocol {
       if (isKeePassError(error, KEEPASS_ERROR.NO_LOGINS_FOUND)) return [];
       throw error;
     }
+  }
+
+  async getDatabaseEntries(association: Association, allowUnlock: boolean): Promise<RawEntryMeta[]> {
+    const reply = await this.call(
+      "get-database-entries",
+      { keys: [{ id: association.id, key: association.idKey }] },
+      { allowUnlock, timeoutMs: this.options.timeouts.unlockMs },
+    );
+    return Array.isArray(reply.entries) ? (reply.entries as RawEntryMeta[]) : [];
   }
 
   async getTotp(uuid: string, allowUnlock: boolean): Promise<string> {

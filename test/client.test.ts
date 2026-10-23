@@ -140,6 +140,25 @@ describe("connect", () => {
     session.close();
   });
 
+  it("lists all entry metadata (url, name, uuid)", async () => {
+    const fake = new FakeKeePass({
+      entries: [
+        ...entries,
+        { name: "Billing", login: "b", password: "pw", uuid: "uuid-2", url: "http://loto.dev/billing" },
+      ],
+    });
+    const session = await connect({ channel: fake, env: env(), logger: captureLogger().logger });
+
+    const metas = await session.listEntries();
+
+    expect(metas).toEqual([
+      { name: "Players", uuid: "uuid-1", url: "http://loto.dev/players" },
+      { name: "Billing", uuid: "uuid-2", url: "http://loto.dev/billing" },
+    ]);
+    expect(fake.calls).toContain("get-database-entries");
+    session.close();
+  });
+
   it("requests TOTP by uuid", async () => {
     const fake = new FakeKeePass({ entries });
     const session = await connect({ channel: fake, env: env(), logger: captureLogger().logger });
