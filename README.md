@@ -85,16 +85,17 @@ KeePassXC returns the entry list through the `get-database-entries` request, so 
 
 ### Entry completion
 
-`kpx completion` prints a Bash completion function that uses `fzf` to pick an entry and inserts it as the unambiguous `keepassxc://by-uuid/<uuid>` reference. It works for any command whose first argument is an entry.
+`kpx completion` prints Bash completion helpers that use `fzf` to pick an entry. They work for any command whose first argument is an entry, and the name may be repeated to attach several commands at once.
 
-`fzf` must be installed. Enable it with:
+`fzf` must be installed. Enable a helper with:
 
 ```sh
-source <(kpx completion)    # add to ~/.bashrc
-kpx_complete_link_for doit  # attach to your command
+source <(kpx completion)       # add to ~/.bashrc
+kpx_complete_link_for doit     # inserts keepassxc://by-uuid/<uuid>
+kpx_complete_url_for  doit     # inserts the plain entry URL
 ```
 
-After that, `doit wsl.dev` + <kbd>Tab</kbd> opens the list of entries matching the fragment; the chosen one is inserted as `keepassxc://by-uuid/…`.
+After that, `doit wsl.dev` + <kbd>Tab</kbd> opens the list of entries matching the fragment. `kpx_complete_link_for` inserts the chosen entry as the unambiguous `keepassxc://by-uuid/<uuid>`, which resolves regardless of the entry URL or the "best-matching-only" setting. `kpx_complete_url_for` inserts the entry URL itself, which is friendlier in shell history but resolves by URL (ambiguous when several entries share it).
 
 The completion calls the CLI as `kpx`; if it is not on `PATH`, set `KPX_CMD`. When running through `pnpm`, add `--silent`, otherwise the pnpm banner ends up in the list:
 
