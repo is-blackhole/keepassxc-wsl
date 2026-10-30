@@ -1,6 +1,6 @@
 # kpx
 
-CLI for KeePassXC running on Windows, used from WSL. It fetches entry passwords, logins and attributes through browser integration (`keepassxc-proxy.exe`). Nothing needs to be typed on the WSL side beyond confirming access in KeePassXC.
+CLI for KeePassXC running on Windows, used from WSL. It fetches entry passwords, logins and attributes through browser integration (`keepassxc-proxy.exe`); the database password is entered only in KeePassXC.
 
 ## Installation
 
@@ -16,7 +16,7 @@ The default proxy path is `/mnt/c/Program Files/KeePassXC/keepassxc-proxy.exe`. 
 ## KeePassXC setup
 
 1. Enable Browser Integration: "Tools → Settings → Browser Integration".
-2. Under "Advanced", enable "Return additional string fields with the 'KPH: ' prefix".
+2. Under "Advanced", enable **Return advanced string fields which start with "KPH: "**.
 3. Enable "Return only best-matching credentials".
 4. Optionally turn off the access prompt or select "Remember".
 
@@ -25,46 +25,105 @@ The default proxy path is `/mnt/c/Program Files/KeePassXC/keepassxc-proxy.exe`. 
 - The URL field points to the resource, for example `wsl.dev/service`.
 - Variables are stored in string attributes named `KPH: NAME`, for example `KPH: API_KEY`.
 
-## Commands
+## Usage scenarios
+
+### Print one value
+
+For a password, login, TOTP code or one attribute:
 
 ```sh
-kpx status                                   # proxy, KeePassXC version, database, association
-kpx associate                                # re-associate kpx with the database (confirm in KeePassXC)
-kpx get wsl.dev/service                      # entry password
-kpx get wsl.dev/service -f API_KEY           # the KPH: API_KEY attribute
+kpx get wsl.dev/service                      # password
+kpx get wsl.dev/service -f login             # login
+kpx get wsl.dev/service -f API_KEY           # KPH: API_KEY attribute
+kpx get wsl.dev/service -f totp              # current TOTP code
 kpx get wsl.dev/service --name "Service *" --login admin
-(umask 077; kpx env wsl.dev/service > .env)
-eval "$(kpx env wsl.dev/service --format shell)"
-kpx list wsl.dev                             # URL + title + uuid of entries matching the fragment
-kpx render .env.tpl -o .env                  # substitute {{kp:…}} placeholders in a template
+```
+
+When piped, the value has no trailing newline. If several entries match, the command fails with exit code 3 and prints the candidates, so narrow the selection with the filters described in [Filters](#filters).
+
+### Pass secrets to one command
+
+Start a process that needs the attributes, without writing them anywhere:
+
+```sh
+kpx run wsl.dev/backend --only TYPEORM_URL -- npm run start:dev
 kpx run wsl.dev/service --only API_KEY,DB_URL -- pnpm dev
 ```
 
+`--only` is strongly recommended: without it every attribute of the entry is passed, and attributes override variables such as `PATH` or `NODE_OPTIONS` in the child environment. The process exit code becomes the `kpx` exit code.
+
+### Write a `.env` file
+
+When the variables must be read by a dotenv parser (`node --env-file`, `docker compose`, `pnpm`, `vitest`):
+
+```sh
+(umask 077; kpx env wsl.dev/service > .env)
+```
+
+Use `--prefix P` to namespace the names and `--with-login VAR`/`--with-password VAR` to add the entry login and password. The output is dotenv, not shell code: never `eval` or `source` it.
+
+### Read secrets in a script or config
+
+When a tool wants JSON:
+
+```sh
+kpx env wsl.dev/service --format json | jq -r .TYPEORM_URL
+```
+
+### Pick an entry without typing its URL
+
+Bash completion that resolves an entry with `fzf` and inserts it into the command line:
+
+```sh
+source <(kpx completion)       # in ~/.bashrc
+
+doit() {
+  local dsn
+  dsn=$(kpx get "$1" -f DB_URL) || return
+  psql "$dsn"
+}
+kpx_complete_link_for doit     # doit <Tab> → keepassxc://by-uuid/<uuid>
+```
+
+### Inspect entries
+
+```sh
+kpx list                # all entries: URL, title, UUID
+kpx list wsl.dev        # entries whose URL or title contains wsl.dev
+```
+
+### Check or repair the connection
+
+```sh
+kpx status              # proxy path, KeePassXC version, database state, association
+kpx associate           # create a new association (confirm in KeePassXC)
+```
+
+`kpx status` exits non-zero when the proxy is missing or the association is not valid.
+
+## Command reference
+
+Details and restrictions per command.
+
+### get
+
+`kpx get <url>` prints one field: `password` (default), `login`, `name`, `uuid`, `totp`, or any `KPH: <NAME>` attribute by its `<NAME>`. On a terminal the value ends with a newline; when piped it does not, so it can be used in `$(...)` as is.
+
 ### Filters
 
-`--name` (supports `*`), `--login`, `--group`, `--uuid`. Without filters, if more than one entry matches, the command exits with code 3 and prints the list.
-
-Fields for `get -f`: `password` (default), `login`, `name`, `uuid`, `totp`, and any `KPH: <NAME>` attribute by its `<NAME>`.
+`--name` (supports `*`), `--login`, `--group` and `--uuid` narrow the entry for `get`, `env` and `run`. Without filters, if more than one entry matches, the command exits with code 3 and prints the list.
 
 ### env
 
-- `--format env|shell|json`, default `env` (dotenv, compatible with `node --env-file` and `node:util.parseEnv`). Quoting is chosen so the value round-trips exactly; if a value cannot be represented losslessly, the command fails before printing any data. Use `json` or `shell` for such values.
+- `--format env|json`, default `env` (dotenv, compatible with `node --env-file` and `node:util.parseEnv`). Quoting is chosen so the value round-trips exactly; if a value cannot be represented losslessly, the command fails before printing any data. Use `json` for such values.
 - `--prefix P` adds a prefix to variable names.
 - `--only A,B` prints only the listed attributes.
 - `--with-login VAR` and `--with-password VAR` add the entry login and password.
 - Attributes whose names are not valid environment variable names are skipped with a warning.
 
-The `env` format is meant for a dotenv parser. For `eval` or `source`, use only `--format shell`: dotenv values may contain syntax that the shell would execute.
+The `env` format is meant for a dotenv parser, not for `eval` or `source`: dotenv values may contain syntax that the shell would execute. To pass attributes to a process, use `run`.
 
 With `> .env`, the file is created by the shell. `umask 077` in the example protects the new file; for an existing file, check its permissions and run `chmod 600 .env` if needed.
-
-### render
-
-Placeholder syntax: `{{kp:<url>#<field>}}` or with filters `{{kp:<url>#<field>?name=X&login=Y}}`. Text outside placeholders is copied as is. `\{{` emits a literal `{{`.
-
-Entries are cached per URL and filter pair, so one URL needs only a single request and a single confirmation window. If any substitution fails, the file is not written and all errors go to stderr. The file is written atomically, with mode 600 by default (`--mode`).
-
-Substitution is literal: values are not escaped for dotenv, JSON or shell. Use trusted templates and mind the target file syntax; to export variables in dotenv format use `env`.
 
 ### run
 
@@ -85,7 +144,9 @@ KeePassXC returns the entry list through the `get-database-entries` request, so 
 
 ### Entry completion
 
-`kpx completion` prints Bash completion helpers that use `fzf` to pick an entry. They work for any command whose first argument is an entry, and the name may be repeated to attach several commands at once.
+Completion lives in a separate Bash script, `completions/kpx.bash`, and is not part of the CLI logic: it only calls `kpx list` and feeds the result to `fzf`. `kpx completion` prints that file, so the script has a single source of truth and can be edited or sourced directly.
+
+The helpers work for any command whose first argument is an entry, and the name may be repeated to attach several commands at once.
 
 `fzf` must be installed. Enable a helper with:
 
@@ -104,17 +165,7 @@ export KPX_CMD="pnpm --silent kpx"                          # only from the proj
 export KPX_CMD="node /path/to/keepassxc-wsl/dist/cli.js"    # from anywhere
 ```
 
-Example wrapper that connects to a database with `psql`:
-
-```sh
-doit() {
-  local dsn
-  dsn=$(kpx get "$1" -f DB_URL) || return
-  psql "$dsn"
-}
-```
-
-With `doit wsl.dev` + <kbd>Tab</kbd>, an entry is selected and resolved via `keepassxc://by-uuid/…`, and `psql` connects using the `KPH: DB_URL` attribute of exactly that entry.
+A wrapper example is in [Pick an entry without typing its URL](#pick-an-entry-without-typing-its-url).
 
 ## Exit codes
 
@@ -147,7 +198,7 @@ Do not publish this file and do not include it in diagnostic attachments or unen
 
 ## Revoking access
 
-In KeePassXC: database settings → Browser Integration → remove the "wsl" key. The local association file can be removed manually: `rm ~/.config/kpx/assoc.json`.
+In KeePassXC: database settings → Browser Integration → remove the association created by `kpx`. The local association file can be removed manually: `rm ~/.config/kpx/assoc.json`.
 
 ## Development
 

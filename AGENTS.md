@@ -10,7 +10,8 @@ Node.js (ES modules), TypeScript. `node:util.parseEnv` requires Node.js 20.12.0+
 
 ## Project structure
 
-- `src/` — CLI, KeePassXC protocol/client, transport, output formatting and template rendering.
+- `src/` — CLI, KeePassXC protocol/client, transport, entry selection and output formatting.
+- `completions/` — Bash completion script; shipped as is and printed by `kpx completion`, not compiled by TypeScript.
 - `test/` — unit tests with an in-memory KeePassXC fake; `e2e.test.ts` is an opt-in test against real KeePassXC.
 - `scripts/` — manual development/probe scripts.
 - `dist/` — generated build output; do not edit by hand.
@@ -32,7 +33,7 @@ The opt-in command `KPX_E2E=1 pnpm test` connects to real KeePassXC and may trig
 ## Security
 
 - Treat passwords, TOTP codes, KeePassXC attributes and `~/.config/kpx/assoc.json` as secrets. Never log real secret values or copy values from a real database into tests, diagnostics, commits or review output; use synthetic test fixtures.
-- Keep secret output on stdout and diagnostics on stderr. Preserve restrictive permissions for association/output files; avoid tests that write secrets to persistent paths.
+- Keep secret output on stdout and diagnostics on stderr. Preserve the restrictive permissions of the association file; avoid tests that write secrets to persistent paths.
 - `kpx run` passes selected entry attributes into a child process environment. Do not assume entry attributes are trusted; preserve/document `--only` behavior and avoid shell-based process execution.
 - The project targets a trusted local WSL environment. Do not imply that file permissions protect secrets from other processes running as the same user.
 
