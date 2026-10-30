@@ -3,7 +3,7 @@ import { chmod, rename, rm, writeFile } from "node:fs/promises";
 import { parseEnv } from "node:util";
 import { KpxError } from "./errors.js";
 
-export type Format = "env" | "shell" | "json";
+export type Format = "env" | "json";
 export type Variables = Array<[string, string]>;
 
 export interface Logger {
@@ -46,19 +46,13 @@ export function quoteEnvValue(value: string): string {
     const parsed = parseEnv(`KEY=${candidate}\n`);
     if (Object.keys(parsed).length === 1 && parsed.KEY === value) return candidate;
   }
-  throw new KpxError("value cannot be represented losslessly in dotenv format; use --format json or --format shell");
-}
-
-export function escapeShellValue(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
+  throw new KpxError("value cannot be represented losslessly in dotenv format; use --format json");
 }
 
 export function formatVariables(variables: Variables, format: Format): string {
   switch (format) {
     case "env":
       return variables.map(([key, value]) => `${key}=${quoteEnvValue(value)}\n`).join("");
-    case "shell":
-      return variables.map(([key, value]) => `export ${key}=${escapeShellValue(value)}\n`).join("");
     case "json":
       return `${JSON.stringify(Object.fromEntries(variables), null, 2)}\n`;
   }

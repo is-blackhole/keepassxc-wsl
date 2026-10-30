@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { formatVariables, escapeShellValue, writeFileAtomic } from "../src/output.js";
+import { formatVariables, writeFileAtomic } from "../src/output.js";
 
 describe("env format", () => {
   it.each([
@@ -37,21 +37,6 @@ describe("env format", () => {
 
   it("keeps unicode as is", () => {
     expect(formatVariables([["GREETING", "pässwörd 🔑"]], "env")).toBe('GREETING="pässwörd 🔑"\n');
-  });
-});
-
-describe("shell format", () => {
-  it("escapes single quotes for eval", () => {
-    expect(escapeShellValue("it's")).toBe("'it'\\''s'");
-    expect(formatVariables([["KEY", "it's $HOME"]], "shell")).toBe("export KEY='it'\\''s $HOME'\n");
-  });
-
-  it("leaves dollar and backslash untouched inside single quotes", () => {
-    expect(formatVariables([["KEY", "a$b\\c\"d"]], "shell")).toBe("export KEY='a$b\\c\"d'\n");
-  });
-
-  it("keeps newlines inside the quotes", () => {
-    expect(formatVariables([["KEY", "a\nb"]], "shell")).toBe("export KEY='a\nb'\n");
   });
 });
 

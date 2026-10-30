@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
+import { fileURLToPath } from "node:url";
 import { type KeePassSession, connect } from "./client.js";
 import { EXIT, KpxError } from "./errors.js";
 import {
@@ -13,11 +14,9 @@ import {
   createLogger,
   formatVariables,
   isValidVarName,
-  writeFileAtomic,
 } from "./output.js";
 import { isAssociationRejected, isKeePassError, KEEPASS_ERROR } from "./protocol.js";
 import { DEFAULT_FIELD, type Entry, type EntryFilter, matchFragment, readField, selectEntry } from "./select.js";
-import { parseTemplate, renderTemplate } from "./template.js";
 import { resolveProxyPath } from "./transport.js";
 
 const OPTIONS = {
@@ -33,8 +32,6 @@ const OPTIONS = {
   only: { type: "string" },
   "with-login": { type: "string" },
   "with-password": { type: "string" },
-  output: { type: "string", short: "o" },
-  mode: { type: "string" },
 } as const;
 
 interface Options {
@@ -50,8 +47,6 @@ interface Options {
   only?: string;
   "with-login"?: string;
   "with-password"?: string;
-  output?: string;
-  mode?: string;
 }
 
 interface Context {
@@ -64,11 +59,10 @@ interface Context {
 
 const USAGE = `Usage:
   kpx get <url> [-f FIELD] [--name N] [--login L] [--group G] [--uuid U]
-  kpx env <url> [filters] [--format env|shell|json] [--prefix P] [--only A,B]
+  kpx env <url> [filters] [--format env|json] [--prefix P] [--only A,B]
                 [--with-login VAR] [--with-password VAR]
   kpx list [fragment]
-  kpx completion [command]
-  kpx render <template> [-o out] [--mode 600]
+  kpx completion
   kpx run <url> [filters] [--only A,B] -- <command> [args…]
   kpx associate
   kpx status
@@ -102,13 +96,8 @@ function filterFrom(options: Options): EntryFilter {
 }
 
 function parseFormat(value: string): Format {
-  if (value === "env" || value === "shell" || value === "json") return value;
+  if (value === "env" || value === "json") return value;
   throw usage(`unknown format: ${value}`);
-}
-
-function parseMode(value: string): number {
-  if (!/^[0-7]{3,4}$/.test(value)) throw usage(`invalid file mode: ${value}`);
-  return Number.parseInt(value, 8);
 }
 
 async function withSession<T>(
@@ -200,36 +189,6 @@ async function cmdEnv(context: Context): Promise<number> {
   return EXIT.OK;
 }
 
-async function cmdRender(context: Context): Promise<number> {
-  const templatePath = requireArg(context.args, 0, "template");
-  const { options, logger } = context;
-  const mode = parseMode(options.mode ?? "600");
-  const tokens = parseTemplate(await readFile(templatePath, "utf8"));
-
-  const result = await withSession(context, {}, (session) =>
-    renderTemplate(tokens, {
-      select: (url, filter) => selectFor(session, url, filter, logger),
-      readField: (entry, field) => readField(entry, field, (uuid) => session.getTotp(uuid)),
-    }),
-  );
-
-  const [first] = result.errors;
-  if (first) {
-    for (const failure of result.errors) {
-      logger.error(`${failure.raw}: ${errorMessage(failure.error)}`);
-    }
-    logger.error("file was not written");
-    return exitCodeFor(first.error);
-  }
-
-  if (options.output !== undefined) {
-    await writeFileAtomic(options.output, result.text, mode);
-  } else {
-    process.stdout.write(result.text);
-  }
-  return EXIT.OK;
-}
-
 async function cmdList(context: Context): Promise<number> {
   const fragment = context.args[0] ?? "";
   const metas = await withSession(context, {}, async (session) => session.listEntries());
@@ -240,83 +199,11 @@ async function cmdList(context: Context): Promise<number> {
   return EXIT.OK;
 }
 
-const COMPLETION_SCRIPT = `# KeePassXC entry completion for kpx. Requires fzf: https://github.com/junegunn/fzf
+/** The Bash completion script lives next to the build output, see `completions/`. */
+const COMPLETION_PATH = fileURLToPath(new URL("../completions/kpx.bash", import.meta.url));
 
-# Ask readline to redraw the prompt after fzf closes (see the trailing
-# printf '\\e[5n' below). Same trick the stock fzf completion uses.
-bind '"\\e[0n": redraw-current-line' 2>/dev/null
-
-# The kpx CLI is located via $KPX_CMD (default: "kpx"). Point it at your build
-# if "kpx" is not on PATH, e.g. KPX_CMD="pnpm kpx" or
-# KPX_CMD="node /path/to/keepassxc-wsl/dist/cli.js".
-
-# Prompt for an entry with fzf and print the chosen line to stdout:
-# "<url>\t<title>\t<uuid>", or nothing if the user cancels. fzf draws its UI on
-# the terminal; --with-nth=1,2 shows only URL and title, while the returned line
-# still carries the UUID in field 3. kpx list already filters by "$cur", so fzf
-# gets the matching subset directly.
-_kpx_pick_entry() {
-  local cur="$1" kpx_cmd="\${KPX_CMD:-kpx}"
-  $kpx_cmd --quiet list "$cur" | fzf \
---no-sort \
---delimiter=$'\\t' --nth=1,2 --with-nth=1,2 \
---prompt='entry > ' --height=40%
-}
-
-# Completes the entry argument of a wrapper command with
-# keepassxc://by-uuid/<uuid>, which kpx resolves unambiguously regardless of
-# the entry URL or the "best-matching-only" setting.
-_kpx_complete_link() {
-  if [ "$COMP_CWORD" -gt 1 ]; then
-    return 0
-  fi
-
-  local picked uuid
-  picked="$(_kpx_pick_entry "\${COMP_WORDS[COMP_CWORD]}")"
-  printf '\\e[5n'
-
-  [ -z "$picked" ] && return 0
-
-  uuid="\${picked##*$'\\t'}"
-  [ -z "$uuid" ] && return 0
-
-  COMPREPLY=("keepassxc://by-uuid/$uuid")
-  return 0
-}
-
-# Completes the entry argument of a wrapper command with the plain entry URL.
-_kpx_complete_url() {
-  if [ "$COMP_CWORD" -gt 1 ]; then
-    return 0
-  fi
-
-  local picked url
-  picked="$(_kpx_pick_entry "\${COMP_WORDS[COMP_CWORD]}")"
-  printf '\\e[5n'
-
-  [ -z "$picked" ] && return 0
-
-  url="\${picked%%$'\\t'*}"
-  [ -z "$url" ] && return 0
-
-  COMPREPLY=("$url")
-  return 0
-}
-
-# Register completion for your own wrapper commands (NAME may be repeated):
-#   source <(kpx completion)
-#   kpx_complete_link_for doit          # inserts keepassxc://by-uuid/<uuid>
-#   kpx_complete_url_for  doit psql     # inserts the plain entry URL
-kpx_complete_link_for() {
-  complete -o nospace -F _kpx_complete_link "$@"
-}
-kpx_complete_url_for() {
-  complete -F _kpx_complete_url "$@"
-}`;
-
-async function cmdCompletion(_context: Context): Promise<number> {
-  void _context;
-  process.stdout.write(COMPLETION_SCRIPT);
+async function cmdCompletion(): Promise<number> {
+  process.stdout.write(await readFile(COMPLETION_PATH, "utf8"));
   return EXIT.OK;
 }
 
@@ -390,13 +277,34 @@ async function cmdStatus(context: Context): Promise<number> {
 const COMMANDS: Record<string, (context: Context) => Promise<number>> = {
   get: cmdGet,
   env: cmdEnv,
-  render: cmdRender,
   run: cmdRun,
   associate: cmdAssociate,
   list: cmdList,
   completion: cmdCompletion,
   status: cmdStatus,
 };
+
+const COMMON_OPTIONS = ["quiet", "help"] as const;
+
+/** Options each command accepts; anything else is a usage error rather than a silent no-op. */
+const COMMAND_OPTIONS: Record<string, ReadonlyArray<keyof Options>> = {
+  get: ["field", "name", "login", "group", "uuid"],
+  env: ["name", "login", "group", "uuid", "format", "prefix", "only", "with-login", "with-password"],
+  run: ["name", "login", "group", "uuid", "only"],
+  list: [],
+  completion: [],
+  associate: [],
+  status: [],
+};
+
+function validateOptions(command: string, values: Record<string, unknown>): void {
+  const allowed = new Set<string>([...COMMON_OPTIONS, ...(COMMAND_OPTIONS[command] ?? [])]);
+  const unsupported = Object.keys(values).filter((key) => !allowed.has(key));
+  if (unsupported.length > 0) {
+    const list = unsupported.map((key) => `--${key}`).join(", ");
+    throw usage(`${command}: unsupported option ${list}`);
+  }
+}
 
 export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env): Promise<number> {
   let logger = createLogger(false);
@@ -422,6 +330,7 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
 
     const handler = COMMANDS[command];
     if (!handler) throw usage(`unknown command: ${command}`);
+    validateOptions(command, values);
     return await handler({ options, args, tail, env, logger });
   } catch (error) {
     logger.error(errorMessage(error));
