@@ -13,6 +13,8 @@ pnpm link --global
 
 The default proxy path is `/mnt/c/Program Files/KeePassXC/keepassxc-proxy.exe`. Override it with the `KPX_PROXY` variable.
 
+After updating the package, re-run `pnpm link --global` so the global `kpx` launcher points to `dist/bin.js`, then re-source the completion in open shells: `source <(kpx completion)`.
+
 ## KeePassXC setup
 
 1. Enable Browser Integration: "Tools → Settings → Browser Integration".

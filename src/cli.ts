@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -16,7 +15,15 @@ import {
   isValidVarName,
 } from "./output.js";
 import { isAssociationRejected, isKeePassError, KEEPASS_ERROR } from "./protocol.js";
-import { DEFAULT_FIELD, type Entry, type EntryFilter, matchFragment, readField, selectEntry } from "./select.js";
+import {
+  DEFAULT_FIELD,
+  type Entry,
+  type EntryFilter,
+  type EntryMeta,
+  matchFragment,
+  readField,
+  selectEntry,
+} from "./select.js";
 import { resolveProxyPath } from "./transport.js";
 
 const OPTIONS = {
@@ -78,7 +85,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function exitCodeFor(error: unknown): number {
+export function exitCodeFor(error: unknown): number {
   if (error instanceof KpxError) return error.exitCode;
   if (isKeePassError(error, KEEPASS_ERROR.DATABASE_NOT_OPENED)) return EXIT.LOCKED;
   if (isAssociationRejected(error)) return EXIT.ASSOC_REJECTED;
@@ -189,13 +196,17 @@ async function cmdEnv(context: Context): Promise<number> {
   return EXIT.OK;
 }
 
-async function cmdList(context: Context): Promise<number> {
-  const fragment = context.args[0] ?? "";
-  const metas = await withSession(context, {}, async (session) => session.listEntries());
+export function formatEntryMetas(metas: EntryMeta[], fragment = ""): string {
   const lines = metas
     .filter((meta) => matchFragment(fragment, meta))
     .map((meta) => `${meta.url}\t${meta.name}\t${meta.uuid}`);
-  process.stdout.write(`${lines.join("\n")}${lines.length > 0 ? "\n" : ""}`);
+  return `${lines.join("\n")}${lines.length > 0 ? "\n" : ""}`;
+}
+
+async function cmdList(context: Context): Promise<number> {
+  const fragment = context.args[0] ?? "";
+  const metas = await withSession(context, {}, async (session) => session.listEntries());
+  process.stdout.write(formatEntryMetas(metas, fragment));
   return EXIT.OK;
 }
 
@@ -221,7 +232,7 @@ async function cmdRun(context: Context): Promise<number> {
   return runChild(file, argv, Object.fromEntries(variables), context.env, logger);
 }
 
-function runChild(
+export function runChild(
   file: string,
   argv: string[],
   variables: Record<string, string>,
@@ -337,7 +348,3 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
     return exitCodeFor(error);
   }
 }
-
-main(process.argv.slice(2)).then((code) => {
-  process.exitCode = code;
-});
