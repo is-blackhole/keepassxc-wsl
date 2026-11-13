@@ -11,6 +11,8 @@ pnpm build
 pnpm link --global
 ```
 
+Requires Node.js 20.12 or newer; Node.js 22+ is recommended for development.
+
 The default proxy path is `/mnt/c/Program Files/KeePassXC/keepassxc-proxy.exe`. Override it with the `KPX_PROXY` variable.
 
 After updating the package, re-run `pnpm link --global` so the global `kpx` launcher points to `dist/bin.js`, then re-source the completion in open shells: `source <(kpx completion)`.
@@ -105,7 +107,7 @@ kpx associate           # create a new association (confirm in KeePassXC)
 
 ## Command reference
 
-Details and restrictions per command.
+Details and restrictions per command. `kpx --version` (`-v`) prints the version from `package.json`.
 
 ### get
 
@@ -164,7 +166,7 @@ The completion calls the CLI as `kpx`; if it is not on `PATH`, set `KPX_CMD`. Wh
 
 ```sh
 export KPX_CMD="pnpm --silent kpx"                          # only from the project directory
-export KPX_CMD="node /path/to/keepassxc-wsl/dist/cli.js"    # from anywhere
+export KPX_CMD="node /path/to/keepassxc-wsl/dist/bin.js"    # from anywhere
 ```
 
 A wrapper example is in [Pick an entry without typing its URL](#pick-an-entry-without-typing-its-url).

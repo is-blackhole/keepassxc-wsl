@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { exitCodeFor, formatEntryMetas, main, runChild } from "../src/cli.js";
 import { EXIT, KpxError } from "../src/errors.js";
@@ -46,6 +47,19 @@ describe("main", () => {
     const code = await main([]);
     expect(code).toBe(EXIT.FAILURE);
     expect(io.stdout.join("")).toContain("Usage:");
+    expect(io.stderr).toEqual([]);
+  });
+
+  it.each(["--version", "-v"])("prints the package version with %s", async (flag) => {
+    const io = captureWrites();
+    const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as {
+      version: string;
+    };
+
+    const code = await main([flag]);
+
+    expect(code).toBe(EXIT.OK);
+    expect(io.stdout.join("")).toBe(`${pkg.version}\n`);
     expect(io.stderr).toEqual([]);
   });
 

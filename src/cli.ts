@@ -29,6 +29,7 @@ import { resolveProxyPath } from "./transport.js";
 const OPTIONS = {
   quiet: { type: "boolean", short: "q" },
   help: { type: "boolean", short: "h" },
+  version: { type: "boolean", short: "v" },
   field: { type: "string", short: "f" },
   name: { type: "string" },
   login: { type: "string" },
@@ -44,6 +45,7 @@ const OPTIONS = {
 interface Options {
   quiet?: boolean;
   help?: boolean;
+  version?: boolean;
   field?: string;
   name?: string;
   login?: string;
@@ -74,7 +76,7 @@ const USAGE = `Usage:
   kpx associate
   kpx status
 
-Common flags: -q, --quiet (do not print diagnostics to stderr), -h, --help
+Common flags: -q, --quiet (do not print diagnostics to stderr), -h, --help, -v, --version
 `;
 
 function usage(message: string): KpxError {
@@ -213,6 +215,17 @@ async function cmdList(context: Context): Promise<number> {
 /** The Bash completion script lives next to the build output, see `completions/`. */
 const COMPLETION_PATH = fileURLToPath(new URL("../completions/kpx.bash", import.meta.url));
 
+/** Resolved from `src/cli.ts` and `dist/cli.js` alike: both are one level below the package root. */
+const PACKAGE_JSON_PATH = new URL("../package.json", import.meta.url);
+
+async function readVersion(): Promise<string> {
+  const pkg = JSON.parse(await readFile(PACKAGE_JSON_PATH, "utf8")) as { version?: unknown };
+  if (typeof pkg.version !== "string" || pkg.version === "") {
+    throw new KpxError("package.json has no version");
+  }
+  return pkg.version;
+}
+
 async function cmdCompletion(): Promise<number> {
   process.stdout.write(await readFile(COMPLETION_PATH, "utf8"));
   return EXIT.OK;
@@ -300,7 +313,7 @@ const COMMANDS: Record<string, (context: Context) => Promise<number>> = {
   status: cmdStatus,
 };
 
-const COMMON_OPTIONS = ["quiet", "help"] as const;
+const COMMON_OPTIONS = ["quiet", "help", "version"] as const;
 
 /** Options each command accepts; anything else is a usage error rather than a silent no-op. */
 const COMMAND_OPTIONS: Record<string, ReadonlyArray<keyof Options>> = {
@@ -339,6 +352,10 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
     logger = createLogger(options.quiet === true);
 
     const [command, ...args] = positionals;
+    if (options.version) {
+      process.stdout.write(`${await readVersion()}\n`);
+      return EXIT.OK;
+    }
     if (options.help || command === undefined) {
       process.stdout.write(USAGE);
       return command === undefined && !options.help ? EXIT.FAILURE : EXIT.OK;

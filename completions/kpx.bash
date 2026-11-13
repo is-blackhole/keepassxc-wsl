@@ -6,7 +6,7 @@ bind '"\e[0n": redraw-current-line' 2>/dev/null
 
 # The kpx CLI is located via $KPX_CMD (default: "kpx"). Point it at your build
 # if "kpx" is not on PATH, e.g. KPX_CMD="pnpm kpx" or
-# KPX_CMD="node /path/to/keepassxc-wsl/dist/cli.js".
+# KPX_CMD="node /path/to/keepassxc-wsl/dist/bin.js".
 
 # Prompt for an entry with fzf and print the chosen line to stdout:
 # "<url>\t<title>\t<uuid>", or nothing if the user cancels. fzf draws its UI on
