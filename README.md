@@ -101,7 +101,7 @@ kpx status              # proxy path, KeePassXC version, database state, associa
 kpx associate           # create a new association (confirm in KeePassXC)
 ```
 
-`kpx status` exits non-zero when the proxy is missing or the association is not valid.
+`kpx status` exits non-zero when the proxy is missing or the association is not valid. Checking the association requires an open database: when the database is locked, the command reports `association: unknown (database locked)` and still exits non-zero.
 
 ## Command reference
 

@@ -257,6 +257,11 @@ async function cmdAssociate(context: Context): Promise<number> {
   return EXIT.OK;
 }
 
+function associationStatus(databaseHash: string | undefined, associated: boolean): string {
+  if (databaseHash === undefined) return "unknown (database locked)";
+  return associated ? "valid" : "none";
+}
+
 async function cmdStatus(context: Context): Promise<number> {
   const proxy = resolveProxyPath(context.env);
   const proxyFound = existsSync(proxy);
@@ -276,10 +281,10 @@ async function cmdStatus(context: Context): Promise<number> {
     lines.push(
       `KeePassXC: ${session.version ?? "version unknown"}`,
       `database: ${session.databaseHash === undefined ? "locked" : "open"}`,
-      `association: ${session.associated ? "valid" : "none"}`,
+      `association: ${associationStatus(session.databaseHash, session.associated)}`,
     );
     process.stdout.write(`${lines.join("\n")}\n`);
-    return session.associated ? EXIT.OK : EXIT.FAILURE;
+    return session.databaseHash !== undefined && session.associated ? EXIT.OK : EXIT.FAILURE;
   } finally {
     session.close();
   }
