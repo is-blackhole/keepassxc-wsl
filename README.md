@@ -4,6 +4,14 @@ CLI for KeePassXC running on Windows, used from WSL. It fetches entry passwords,
 
 ## Installation
 
+### From npm
+
+```sh
+npm install -g keepassxc-wsl     # installs the `kpx` command
+```
+
+### From source
+
 ```sh
 git clone https://github.com/is-blackhole/keepassxc-wsl.git
 cd keepassxc-wsl
@@ -16,7 +24,7 @@ If Node.js is installed through nvm, load it first with `source ~/.nvm/nvm.sh`. 
 
 The default proxy path is `/mnt/c/Program Files/KeePassXC/keepassxc-proxy.exe`. Override it with the `KPX_PROXY` variable.
 
-After updating the package, re-run `pnpm link --global` so the global `kpx` launcher points to `dist/bin.js`, then re-source the completion in open shells: `source <(kpx completion)`.
+After updating the package, re-run the install or `pnpm link --global` so the global `kpx` launcher points to `dist/bin.js`, then re-source the completion in open shells: `source <(kpx completion)`.
 
 ## KeePassXC setup
 
