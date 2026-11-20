@@ -5,13 +5,14 @@ CLI for KeePassXC running on Windows, used from WSL. It fetches entry passwords,
 ## Installation
 
 ```sh
-source ~/.nvm/nvm.sh
+git clone https://github.com/is-blackhole/keepassxc-wsl.git
+cd keepassxc-wsl
 pnpm install
 pnpm build
 pnpm link --global
 ```
 
-Requires Node.js 20.12 or newer; Node.js 22+ is recommended for development.
+If Node.js is installed through nvm, load it first with `source ~/.nvm/nvm.sh`. Requires Node.js 20.12 or newer; Node.js 22+ is recommended for development. pnpm is required, and its version is pinned in `package.json`.
 
 The default proxy path is `/mnt/c/Program Files/KeePassXC/keepassxc-proxy.exe`. Override it with the `KPX_PROXY` variable.
 
@@ -214,3 +215,11 @@ pnpm build
 ```
 
 The integration test against real KeePassXC is run manually: `KPX_E2E=1 pnpm test`.
+
+## AI-assisted development
+
+This project was developed with AI assistance, including code, tests and documentation. Review the changes and test them in your own environment before relying on the tool.
+
+## License
+
+Released under the [ISC License](LICENSE). Bug reports and feature requests: <https://github.com/is-blackhole/keepassxc-wsl/issues>.

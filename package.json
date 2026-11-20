@@ -1,13 +1,28 @@
 {
   "name": "keepassxc-wsl",
   "version": "1.0.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "packageManager": "pnpm@10.34.0",
   "engines": {
     "node": ">=20.12"
   },
   "description": "CLI for KeePassXC via browser integration (WSL → Windows)",
+  "keywords": [
+    "keepassxc",
+    "wsl",
+    "cli",
+    "password-manager",
+    "typescript"
+  ],
+  "homepage": "https://github.com/is-blackhole/keepassxc-wsl#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/is-blackhole/keepassxc-wsl.git"
+  },
+  "bugs": {
+    "url": "https://github.com/is-blackhole/keepassxc-wsl/issues"
+  },
   "bin": {
     "kpx": "dist/bin.js"
   },
@@ -20,9 +35,10 @@
     "kpx": "node dist/bin.js",
     "dev": "tsc -p tsconfig.json --watch",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm build"
   },
-  "author": "igor.sazhnev@gmail.com",
+  "author": "Igor Sazhnev <igor.sazhnev@gmail.com>",
   "license": "ISC",
   "dependencies": {
     "tweetnacl": "^1.0.3"
